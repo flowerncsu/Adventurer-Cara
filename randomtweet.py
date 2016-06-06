@@ -44,10 +44,10 @@ def tweetEvent(eventString):
         api = tweepy.API(auth)
         api.update_status(eventString)
         # update the state variable indicating the new time that a random tweet has gone out
-        botstate.lastRandomTweet = datetime.datetime.now()
+        botstate.stateDict['lastRandomTweet'] = datetime.datetime.now()
         botstate.saveState()
         if logFile is not None:
-            print('Tweeted successfully at ', str(botstate.lastRandomTweet), file=logFile)
+            print('Tweeted successfully at ', str(botstate.stateDict['lastRandomTweet']), file=logFile)
         return True
     else:
         return False # to indicate that the tweet was aborted
@@ -64,11 +64,11 @@ if not botstate.getState():
     if logFile is not None:
         print('Error loading from disk', file=logFile)
 
-# Don't run if the last random tweet was within the last hour. Err on the side of *not* tweeting too much
-if botstate.lastRandomTweet is not None and (datetime.datetime.now() - botstate.lastRandomTweet) > datetime.timedelta(hours=1):
+# Make a random tweet as long as the last random tweet was at least 3 hours ago, to err on the side of not overtweeting.
+if botstate.stateDict['lastRandomTweet'] is not None and (datetime.datetime.now() - botstate.stateDict['lastRandomTweet']) > datetime.timedelta(hours=3):
     # log that tweeting is being attempted
     if logFile is not None:
-        print('Ok to tweet! botstate.lastRandomTweet is ', str(botstate.lastRandomTweet), file=logFile)
+        print("Ok to tweet! stateDict['lastRandomTweet'] is ", str(botstate.stateDict['lastRandomTweet']), file=logFile)
     retries = 0
     # Run the tweet function within the loop declaration, then retry if it fails, up to a max of 6 times.
     while retries <= 5 and not tweetEvent(getRandomFight(botstate.monsterAdjList,botstate.monsterList,botstate.weaponList)):
@@ -78,7 +78,7 @@ if botstate.lastRandomTweet is not None and (datetime.datetime.now() - botstate.
 else:
     # log that tweeting was not attempted
     if logFile is not None:
-        print('Not ok to tweet! botstate.lastRandomTweet is ', str(botstate.lastRandomTweet), file=logFile)
+        print("Not ok to tweet! stateDict['lastRandomTweet'] is ", str(botstate.stateDict['lastRandomTweet']), file=logFile)
 
 # Tag the log with date and time and close it.
 if logFile is not None:
