@@ -2,7 +2,7 @@ import string, random, re, datetime
 import keys   # Private set of constants representing the twitter API auth information
 import tweepy
 import botstate   # Global state information; some values should be immediately replaced with saved data.
-import profanity
+from profanity import profanity
 
 # Used in replyToMention()
 REPLY_SUCCESS = 0
@@ -107,13 +107,20 @@ def replyToMention(mention):
         if logFile is not None:
             print('Mention saved for later reply:', mention.text, file=logFile)
         return REPLY_LATER
+    elif profanity.contains_profanity(mention.text):
+        return REPLY_FAIL
     else:
         attack = checkForAttack(mention.text)
         if attack is not None:
             # Add the username of the person who suggested the fight
             attack += ' @' + mention.user.screen_name
             # Tweet the event and update lastReply
-            tweetEvent(attack, 'lastReply')
+            if tweetEvent(attack, 'lastReply'):
+                return REPLY_SUCCESS
+            else:
+                return REPLY_FAIL
+        else:
+            return REPLY_FAIL
 
 
 # open log for transactions
