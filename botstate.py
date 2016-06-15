@@ -5,7 +5,7 @@ import pickle, datetime
 
 stateDict = {'lastRandomTweet': None, # refers to purely randomly-generated tweets
              'lastReply': None, # refers to a tweet which is specifically a reply to another twitter user
-             'lastMentionFound': None, # status ID of last mention processed
+             'lastMentionFound': None, # timestamp of last mention processed
              'storedMentions': None # list of mentions that may warrant a response but which have not been evaluated yet
 }
 
@@ -46,7 +46,7 @@ def initState(toSet=(datetime.datetime.now() - datetime.timedelta(days=1))):
     to 1 day ago, but can be passed as a parameter (one parameter sets all dates the same.)
     """
     global stateDict
-    stateDict['lastMentionFound'] = 1
+    stateDict['lastMentionFound'] = toSet
     stateDict['lastRandomTweet'] = toSet
     stateDict['lastReply'] = toSet
     saveState()

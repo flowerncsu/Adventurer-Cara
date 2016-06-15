@@ -148,12 +148,12 @@ for mention in botstate.stateDict['storedMentions']:
 mentions = api.mentions_timeline()
 # Use a variable to separately track the last mention number in the current set in case they are out of order,
 # to avoid inadvertently skipping one.
-lastMentionInCurrentSet = 0
+lastMentionInCurrentSet = botstate.stateDict['lastMentionFound']
 for mention in mentions:
-    if mention.id > botstate.stateDict['lastMentionFound']:
+    if mention.created_at > botstate.stateDict['lastMentionFound']:
         replyToMention(mention)
-        if lastMentionInCurrentSet < mention.id:
-            lastMentionInCurrentSet = mention.id
+        if lastMentionInCurrentSet < mention.created_at:
+            lastMentionInCurrentSet = mention.created_at
 if lastMentionInCurrentSet > botstate.stateDict['lastMentionFound']:
     botstate.stateDict['lastMentionFound'] = lastMentionInCurrentSet
 
@@ -175,6 +175,8 @@ else:
     # log that tweeting was not attempted
     if logFile is not None:
         print("Not ok to tweet! stateDict['lastRandomTweet'] is ", str(botstate.stateDict['lastRandomTweet']), file=logFile)
+
+botstate.saveState()
 
 # Tag the log with date and time and close it.
 if logFile is not None:
