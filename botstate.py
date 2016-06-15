@@ -1,11 +1,12 @@
 import pickle, datetime
 
-# These three variables refer to the global state of the bot. All 3 should be datetime objects.
+# This dictionary refers to the global state of the bot.
 # Values are initialized to None, but should be replaced with state information unpacked from saved data before use.
 
 stateDict = {'lastRandomTweet': None, # refers to purely randomly-generated tweets
              'lastReply': None, # refers to a tweet which is specifically a reply to another twitter user
              'lastMentionFound': None, # status ID of last mention processed
+             'storedMentions': None # list of mentions that may warrant a response but which have not been evaluated yet
 }
 
 

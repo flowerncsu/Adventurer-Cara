@@ -2,8 +2,12 @@ import string, random, re, datetime
 import keys   # Private set of constants representing the twitter API auth information
 import tweepy
 import botstate   # Global state information; some values should be immediately replaced with saved data.
+import profanity
 
-
+# Used in replyToMention()
+REPLY_SUCCESS = 0
+REPLY_FAIL = 1
+REPLY_LATER = 2
 
 def putAnBeforeVowels(inputstr):
     """
@@ -35,22 +39,82 @@ def getRandomFight(adjectiveList, monsterList, weaponList):
    template = string.Template("I fought a $adj $monster with a $weapon! $outcome")
    return putAnBeforeVowels(template.substitute(values))
 
-def tweetEvent(eventString):
+def tweetEvent(eventString, tweetType='lastRandomTweet'):
+    """
+    eventString is the text to tweet
+    tweetType should be the key in botstate.stateDict which needs to be updated.
+    """
+    global api
     # make sure the tweet is short enough for twitter's 140 character limit
     if len(eventString) <= 140:
         # send it out and return True
-        auth = tweepy.OAuthHandler(keys.CONSUMER_KEY, keys.CONSUMER_SECRET)
-        auth.set_access_token(keys.ACCESS_TOKEN, keys.ACCESS_TOKEN_SECRET)
-        api = tweepy.API(auth)
         api.update_status(eventString)
         # update the state variable indicating the new time that a random tweet has gone out
-        botstate.stateDict['lastRandomTweet'] = datetime.datetime.now()
+        botstate.stateDict[tweetType] = datetime.datetime.now()
         botstate.saveState()
         if logFile is not None:
-            print('Tweeted successfully at ', str(botstate.stateDict['lastRandomTweet']), file=logFile)
+            print('Tweeted successfully at', str(botstate.stateDict[tweetType]), file=logFile)
         return True
     else:
         return False # to indicate that the tweet was aborted
+
+def removeSpaces(text):
+    """
+    Removes any leading or trailing spaces and returns the trimmed string.
+    """
+    while text[0] == ' ':
+        text = text[1:]
+    while text[-1] == ' ':
+        text = text[:-1]
+    return text
+
+def checkForAttack(text):
+    """
+    If the text passed in states that something "attacks" or "attacked", returns a string containing the thing that attacked.
+    Else, returns None.
+    """
+    if 'attacks' in text or 'attacked' in text:
+        match = re.search('attack', text)
+        # Start with everything before the word "attack"
+        result = text[:match.start()]
+        # Take out the @AdventurerCara (if it wasn't after the word "attack" and thus already removed)
+        result = re.sub('@AdventurerCara', '', result)
+        # At this point we should just have the thing that attacked, possibly with leading or trailing spaces
+        result = removeSpaces(result)
+        # Create a string to fight it with a random weapon
+        values = {'monster': result,
+                  'weapon': random.choice(botstate.weaponList),
+                  'outcome': random.choice(['I won! XP gained.', 'It got the better of me! I escaped.', 'I won by the skin of my teeth, but XP is XP!'])}
+        template = string.Template("I fought $monster with a $weapon! $outcome")
+        return putAnBeforeVowels(template.substitute(values))
+
+    else:
+        return None
+
+def replyToMention(mention):
+    """
+    Takes in a tweepy.Status object and replies if it knows what to do with it.
+    If attempt to reply is successful, tweets, updates botstate.stateDict['lastReply'] and
+       returns REPLY_SUCCESS
+    If botstate.stateDict['lastReply'] was within the past 30 minutes, adds the mention to
+       botstate.stateDict['storedMentions'] and returns REPLY_LATER
+    If no reply was able to be created, returns REPLY_FAIL
+    """
+    if botstate.stateDict['lastReply'] > (datetime.datetime.now() - datetime.timedelta(minutes=30)):
+        if mention not in botstate.stateDict['storedMentions']:
+            # avoid duplicating a mention in storage
+            botstate.stateDict['storedMentions'].append(mention)
+        if logFile is not None:
+            print('Mention saved for later reply:', mention.text, file=logFile)
+        return REPLY_LATER
+    else:
+        attack = checkForAttack(mention.text)
+        if attack is not None:
+            # Add the username of the person who suggested the fight
+            attack += ' @' + mention.user.screen_name
+            # Tweet the event and update lastReply
+            tweetEvent(attack, 'lastReply')
+
 
 # open log for transactions
 try:
@@ -64,8 +128,33 @@ if not botstate.getState():
     if logFile is not None:
         print('Error loading from disk', file=logFile)
 
-# Make a random tweet as long as the last random tweet was at least 3 hours ago, to err on the side of not overtweeting.
-if botstate.stateDict['lastRandomTweet'] is not None and (datetime.datetime.now() - botstate.stateDict['lastRandomTweet']) > datetime.timedelta(hours=3):
+# Set up twitter auth
+auth = tweepy.OAuthHandler(keys.CONSUMER_KEY, keys.CONSUMER_SECRET)
+auth.set_access_token(keys.ACCESS_TOKEN, keys.ACCESS_TOKEN_SECRET)
+api = tweepy.API(auth)
+
+# See if there are any mentions that didn't get a reply earlier
+for mention in botstate.stateDict['storedMentions']:
+    replyToMention(mention)
+
+# Check for new mentions to reply to.
+mentions = api.mentions_timeline()
+# Use a variable to separately track the last mention number in the current set in case they are out of order,
+# to avoid inadvertently skipping one.
+lastMentionInCurrentSet = 0
+for mention in mentions:
+    if mention.id > botstate.stateDict['lastMentionFound']:
+        replyToMention(mention)
+        if lastMentionInCurrentSet < mention.id:
+            lastMentionInCurrentSet = mention.id
+if lastMentionInCurrentSet > botstate.stateDict['lastMentionFound']:
+    botstate.stateDict['lastMentionFound'] = lastMentionInCurrentSet
+
+# Make a random tweet as long as the last random tweet was at least 3 hours ago and last reply at least 15 minutes ago,
+# to err on the side of not overtweeting.
+if botstate.stateDict['lastRandomTweet'] is not None and \
+                (datetime.datetime.now() - botstate.stateDict['lastRandomTweet']) > datetime.timedelta(hours=3) and \
+                (datetime.datetime.now() - botstate.stateDict['lastReply']) > datetime.timedelta(minutes=15):
     # log that tweeting is being attempted
     if logFile is not None:
         print("Ok to tweet! stateDict['lastRandomTweet'] is ", str(botstate.stateDict['lastRandomTweet']), file=logFile)
